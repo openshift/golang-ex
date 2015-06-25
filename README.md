@@ -2,12 +2,12 @@ Golang Sample App on OpenShift
 ============================
 
 This is a sample Golang web application for OpenShift v3 that use the [beego](http://beego.me/)
-framework. This sample use official Docker [golang](https://registry.hub.docker.com/u/library/golang/) image for the build
+framework. This sample uses official Docker [golang](https://registry.hub.docker.com/u/library/golang/) image for the build
 without any modification to the image or sample itself.
 
 This example was copied from the official [beego samples](https://github.com/beego/samples) repository.
 
-If you'd like to install it, follow [these directions](https://github.com/openshift/golang-ex/blob/master/README.md#installation).  
+If you'd like to install it, follow [these instructions](https://github.com/openshift/golang-ex/blob/master/README.md#installation).  
 
 The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on.
 
@@ -23,7 +23,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 		$ oc build-logs beego-example-1
 
-5. Wait for frontend pods to start up (this can take a few minutes):  
+5. Wait for frontend pod to start up (this can take a few minutes):  
 
 		$ oc get pods -w
 
