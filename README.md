@@ -98,6 +98,23 @@ I0625 10:40:56.628610       1 sti.go:96] Using provided push secret for pushing 
 I0625 10:40:56.628720       1 sti.go:99] Pushing 172.30.106.31:5000/goex/beego-example image ...
 ```
 
+###Accessing the application:
+
+If you have the OpenShift router running, you should be able to access the
+application just by typing the frontend route DNS
+(beego-example.openshiftapps.com) into your browser.
+However, you will have to run you own DNS server first, but we can cheat it by
+modifying the `/etc/hosts` file on your host machine. Just append this line at
+the end of that file:
+
+```
+192.168.124.206 beego-example.openshiftapps.com
+```
+
+The `192.168.124.206` is the IP address of the machine you are running the
+OpenShift on. Once you have this change, you can just type the application DNS
+into browser and you should see the chat application login screen.
+
 ###License
 This code is dedicated to the public domain to the maximum extent permitted by applicable law, pursuant to [CC0](http://creativecommons.org/publicdomain/zero/1.0/).
 
