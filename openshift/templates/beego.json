@@ -168,7 +168,7 @@
     {
       "name": "SOURCE_REPOSITORY_URL",
       "description": "The URL of the repository with your application source code",
-      "value": "https://github.com/openshift/rails-ex.git"
+      "value": "https://github.com/openshift/golang-ex.git"
     },
     {
       "name": "SOURCE_REPOSITORY_REF",
@@ -180,8 +180,8 @@
     },
     {
       "name": "APPLICATION_DOMAIN",
-      "description": "The exposed hostname that will route to the Rails service",
-      "value": "rails-example.openshiftapps.com"
+      "description": "The exposed hostname that will route to the Beego service",
+      "value": "beego-example.openshiftapps.com"
     },
     {
       "name": "GITHUB_WEBHOOK_SECRET",
