@@ -30,9 +30,9 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 	Sample output:  
 
-    NAME                     READY     REASON       RESTARTS   AGE
-    beego-example-1-build    0/1       ExitCode:0   0          24m
-    beego-frontend-1-879rd   1/1       Running      0          21m
+    	NAME                     READY     REASON       RESTARTS   AGE
+    	beego-example-1-build    0/1       ExitCode:0   0          24m
+    	beego-frontend-1-879rd   1/1       Running      0          21m
 
 
 6. Check the IP and port the frontend service is running on:  
@@ -43,7 +43,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 	Sample output:  
 
 		NAME             LABELS                              SELECTOR              IP(S)           PORT(S)
-    beego-frontend   template=beego-example   name=beego-frontend   172.30.214.52   8080/TCP
+    	beego-frontend   template=beego-example   name=beego-frontend   172.30.214.52   8080/TCP
 
 In this case, the IP for frontend is 172.30.161.15 and it is on port 8080.  
 *Note*: you can also get this information from the web console.
