@@ -17,7 +17,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 2. Clone your repository to your development machine and cd to the repository directory
 3. Add a Golang application from the beego template:
 
-		$ oc process -f openshift/templates/beego.json -v=SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex | oc create -f - 
+		$ oc new-app openshift/templates/beego.json -p SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex
 
 4. Note that creating from a template will automatically start a new build. Watch your build progress:
 
