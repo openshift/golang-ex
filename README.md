@@ -9,7 +9,7 @@ This example was copied from the official [beego samples](https://github.com/bee
 
 If you'd like to install it, follow [these instructions](https://github.com/openshift/golang-ex/blob/master/README.md#installation).  
 
-The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on.
+The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on, including the default set of ImageStreams defined.  Instructions for installing the default ImageStreams are available [here](http://docs.openshift.org/latest/admin_guide/install/first_steps.html).  If you are defining the set of ImageStreams now, remember to pass in the proper cluster-admin credentials and to create the ImageStreams in the 'openshift' namespace.
 
 ###Installation: 
 
@@ -19,11 +19,15 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 		$ oc new-app openshift/templates/beego.json -p SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex
 
-4. Note that creating from a template will automatically start a new build. Watch your build progress:
+4. Depending on the state of your system, and whether additional items need to be downloaded, it may take around a minute for your build to be started automatically.  If you do not want to wait, run
+
+		$ oc start-build beego-example
+
+5. Once the build is running, watch your build progress  
 
 		$ oc build-logs beego-example-1
 
-5. Wait for frontend pod to start up (this can take a few minutes):  
+6. Wait for beego-example pod to start up (this can take a few minutes):  
 
 		$ oc get pods -w
 
@@ -31,11 +35,11 @@ The steps in this document assume that you have access to an OpenShift deploymen
 	Sample output:  
 
     	NAME                     READY     REASON       RESTARTS   AGE
-    	beego-example-1-build    0/1       ExitCode:0   0          24m
-    	beego-frontend-1-879rd   1/1       Running      0          21m
+	beego-example-1-6c23l     1/1       Running        0          2m
+	beego-example-1-build     0/1       ExitCode:0     0          4m
 
 
-6. Check the IP and port the frontend service is running on:  
+6. Check the IP and port the beego-example service is running on:  
 
 		$ oc get svc
 
@@ -43,9 +47,9 @@ The steps in this document assume that you have access to an OpenShift deploymen
 	Sample output:  
 
 		NAME             LABELS                              SELECTOR              IP(S)           PORT(S)
-    	beego-frontend   template=beego-example   name=beego-frontend   172.30.214.52   8080/TCP
+		beego-example     template=beego-example     name=beego-example           172.30.210.29    8080/TCP
 
-In this case, the IP for frontend is 172.30.161.15 and it is on port 8080.  
+In this case, the IP for beego-example is 172.30.210.29 and it is on port 8080.  
 *Note*: you can also get this information from the web console.
 
 ###Building:
@@ -101,7 +105,7 @@ I0625 10:40:56.628720       1 sti.go:99] Pushing 172.30.106.31:5000/goex/beego-e
 ###Accessing the application:
 
 If you have the OpenShift router running, you should be able to access the
-application just by typing the frontend route DNS
+application just by typing the beego-example route DNS
 (beego-example.openshiftapps.com) into your browser.
 However, you will have to run you own DNS server first, but we can cheat it by
 modifying the `/etc/hosts` file on your host machine. Just append this line at

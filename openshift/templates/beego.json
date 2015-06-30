@@ -17,7 +17,7 @@
       "kind": "Service",
       "apiVersion": "v1",
       "metadata": {
-        "name": "beego-frontend",
+        "name": "beego-example",
         "annotations": {
           "description": "Exposes and load balances the application pods"
         }
@@ -31,7 +31,7 @@
           }
         ],
         "selector": {
-          "name": "beego-frontend"
+          "name": "beego-example"
         }
       }
     },
@@ -39,13 +39,13 @@
       "kind": "Route",
       "apiVersion": "v1",
       "metadata": {
-        "name": "beego-route"
+        "name": "beego-example"
       },
       "spec": {
         "host": "${APPLICATION_DOMAIN}",
         "to": {
           "kind": "Service",
-          "name": "beego-frontend"
+          "name": "beego-example"
         }
       }
     },
@@ -109,7 +109,7 @@
       "kind": "DeploymentConfig",
       "apiVersion": "v1",
       "metadata": {
-        "name": "beego-frontend",
+        "name": "beego-example",
         "annotations": {
           "description": "Defines how to deploy the application server"
         }
@@ -138,13 +138,13 @@
         ],
         "replicas": 1,
         "selector": {
-          "name": "beego-frontend"
+          "name": "beego-example"
         },
         "template": {
           "metadata": {
-            "name": "beego-frontend",
+            "name": "beego-example",
             "labels": {
-              "name": "beego-frontend"
+              "name": "beego-example"
             }
           },
           "spec": {
