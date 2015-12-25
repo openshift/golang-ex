@@ -25,7 +25,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 5. Once the build is running, watch your build progress  
 
-		$ oc build-logs beego-example-1
+		$ oc logs -f bc/beego-example
 
 6. Wait for beego-example pod to start up (this can take a few minutes):  
 
@@ -35,8 +35,8 @@ The steps in this document assume that you have access to an OpenShift deploymen
 	Sample output:  
 
     	NAME                     READY     REASON       RESTARTS   AGE
-	beego-example-1-6c23l     1/1       Running        0          2m
-	beego-example-1-build     0/1       ExitCode:0     0          4m
+		beego-example-1-6c23l     1/1       Running        0          2m
+		beego-example-1-build     0/1       ExitCode:0     0          4m
 
 
 6. Check the IP and port the beego-example service is running on:  
@@ -54,10 +54,11 @@ In this case, the IP for beego-example is 172.30.210.29 and it is on port 8080.
 
 ###Building:
 
-After you create the application from a template, you should see this when you
-type `oc logs beego-example-1-build`:
+After you create the application from a template, you can follow the build progress
+with the `oc logs` command:
 
 ```console
+$ oc logs -f bc/beego-example
 Step 0 : FROM docker.io/library/golang:1.4.2-onbuild
 # Executing 3 build triggers
 Trigger 0, COPY . /go/src/app
