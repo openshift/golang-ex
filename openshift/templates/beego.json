@@ -94,7 +94,7 @@
         },
         "triggers": [
           {
-            "type": "ImageChange"
+            "type": "ConfigChange"
           },
           {
             "type": "GitHub",
