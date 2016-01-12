@@ -75,16 +75,11 @@
             "uri": "${SOURCE_REPOSITORY_URL}",
             "ref": "${SOURCE_REPOSITORY_REF}"
           },
-          "contextDir": "${CONTEXT_DIR}"
+          "contextDir": "${CONTEXT_DIR}",
+          "dockerfile": "FROM docker.io/library/golang:1.4.2-onbuild\nUSER nobody"
         },
         "strategy": {
-          "type": "Source",
-          "sourceStrategy": {
-            "from": {
-              "kind": "DockerImage",
-              "name": "docker.io/library/golang:1.4.2-onbuild"
-            }
-          }
+          "type": "Docker"
         },
         "output": {
           "to": {
