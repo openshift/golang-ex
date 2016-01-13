@@ -76,7 +76,7 @@
             "ref": "${SOURCE_REPOSITORY_REF}"
           },
           "contextDir": "${CONTEXT_DIR}",
-          "dockerfile": "FROM docker.io/library/golang:1.4.2-onbuild\nUSER nobody"
+          "dockerfile": "FROM golang:1.5-onbuild\nUSER nobody\nENV GO15VENDOREXPERIMENT=1"
         },
         "strategy": {
           "type": "Docker"
