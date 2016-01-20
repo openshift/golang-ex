@@ -57,48 +57,53 @@ with the `oc logs` command:
 
 ```console
 $ oc logs -f bc/beego-example
-Step 0 : FROM docker.io/library/golang:1.4.2-onbuild
-# Executing 3 build triggers
-Trigger 0, COPY . /go/src/app
-Step 0 : COPY . /go/src/app
-Trigger 1, RUN go-wrapper download
-Step 0 : RUN go-wrapper download
- ---> Running in 407a110288b5
+Step 0 : FROM golang:1.5
+ ---> 06918e33c280
+Step 1 : USER nobody
+ ---> Using cache
+ ---> 135bdc55c498
+Step 2 : ENV GO15VENDOREXPERIMENT 1
+ ---> Using cache
+ ---> 404e4094569e
+Step 3 : RUN mkdir -p /go/src/github.com/openshift/golang-ex
+ ---> Running in 684a99f755fe
+ ---> 00ef6de11cda
+Removing intermediate container 684a99f755fe
+Step 4 : WORKDIR /go/src/github.com/openshift/golang-ex
+ ---> Running in e9190f59da2c
+ ---> 9a7d93430e72
+Removing intermediate container e9190f59da2c
+Step 5 : COPY . /go/src/github.com/openshift/golang-ex
+ ---> ba13589484a7
+Removing intermediate container 7cebbee54378
+Step 6 : RUN go-wrapper install
+ ---> Running in 26f41423327a
 + exec go get -v -d
-github.com/astaxie/beego (download)
-github.com/beego/i18n (download)
-github.com/Unknwon/goconfig (download)
-github.com/beego/samples (download)
-github.com/gorilla/websocket (download)
-Trigger 2, RUN go-wrapper install
-Step 0 : RUN go-wrapper install
- ---> Running in d44245edf645
 + exec go install -v
-github.com/astaxie/beego/config
-github.com/astaxie/beego/utils
-github.com/astaxie/beego/grace
-github.com/astaxie/beego/session
-github.com/astaxie/beego/logs
-github.com/astaxie/beego/context
-github.com/astaxie/beego/toolbox
-github.com/Unknwon/goconfig
-github.com/astaxie/beego
-github.com/beego/i18n
-github.com/beego/samples/WebIM/models
-github.com/gorilla/websocket
-github.com/beego/samples/WebIM/controllers
-app
- ---> ce01cedcb031
-Removing intermediate container d44245edf645
-Removing intermediate container c0b88982ecd9
-Removing intermediate container 407a110288b5
-Step 1 : ENTRYPOINT ./run
- ---> Running in 23b409f8c11d
- ---> e584df4684e8
-Removing intermediate container 23b409f8c11d
-Successfully built e584df4684e8
-I0625 10:40:56.628610       1 sti.go:96] Using provided push secret for pushing 172.30.106.31:5000/goex/beego-example image
-I0625 10:40:56.628720       1 sti.go:99] Pushing 172.30.106.31:5000/goex/beego-example image ...
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/config
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/utils
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/grace
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/session
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/logs
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/context
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/toolbox
+github.com/openshift/golang-ex/vendor/github.com/Unknwon/goconfig
+github.com/openshift/golang-ex/vendor/github.com/astaxie/beego
+github.com/openshift/golang-ex/vendor/github.com/beego/i18n
+github.com/openshift/golang-ex/vendor/github.com/gorilla/websocket
+github.com/openshift/golang-ex/models
+github.com/openshift/golang-ex/controllers
+github.com/openshift/golang-ex
+ ---> f91517380de3
+Removing intermediate container 26f41423327a
+Step 7 : CMD go-wrapper run
+ ---> Running in c99ec8507c23
+ ---> 01c4d1f5e508
+Removing intermediate container c99ec8507c23
+...
+Successfully built 1d2138f43eab
+I0113 14:19:10.406586       1 docker.go:95] Pushing image 172.30.149.59:5000/demo/beego-example:latest ...
+I0113 14:19:12.002300       1 docker.go:99] Push successful
 ```
 
 ### Accessing the application
