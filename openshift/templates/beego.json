@@ -96,7 +96,10 @@
               "secret": "${GITHUB_WEBHOOK_SECRET}"
             }
           }
-        ]
+        ],
+        "postCommit": {
+          "script": "go test -v ./..."
+        }
       }
     },
     {
