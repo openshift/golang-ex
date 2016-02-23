@@ -1,8 +1,6 @@
-FROM golang:1.5
+FROM golang:1.6
 
 USER nobody
-
-ENV GO15VENDOREXPERIMENT=1
 
 RUN mkdir -p /go/src/github.com/openshift/golang-ex
 WORKDIR /go/src/github.com/openshift/golang-ex

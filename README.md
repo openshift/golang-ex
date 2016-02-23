@@ -2,7 +2,7 @@ Golang Sample App on OpenShift
 ==============================
 
 This is a sample Golang web application for OpenShift v3 that use the [beego](http://beego.me/)
-framework. This sample uses official Docker [golang](https://registry.hub.docker.com/u/library/golang/) image for the build
+framework. This sample uses official Docker [golang](https://hub.docker.com/_/golang/) image for the build
 without any modification to the image or sample itself.
 
 This example was copied from the official [beego samples](https://github.com/beego/samples) repository.
@@ -57,53 +57,6 @@ with the `oc logs` command:
 
 ```console
 $ oc logs -f bc/beego-example
-Step 0 : FROM golang:1.5
- ---> 06918e33c280
-Step 1 : USER nobody
- ---> Using cache
- ---> 135bdc55c498
-Step 2 : ENV GO15VENDOREXPERIMENT 1
- ---> Using cache
- ---> 404e4094569e
-Step 3 : RUN mkdir -p /go/src/github.com/openshift/golang-ex
- ---> Running in 684a99f755fe
- ---> 00ef6de11cda
-Removing intermediate container 684a99f755fe
-Step 4 : WORKDIR /go/src/github.com/openshift/golang-ex
- ---> Running in e9190f59da2c
- ---> 9a7d93430e72
-Removing intermediate container e9190f59da2c
-Step 5 : COPY . /go/src/github.com/openshift/golang-ex
- ---> ba13589484a7
-Removing intermediate container 7cebbee54378
-Step 6 : RUN go-wrapper install
- ---> Running in 26f41423327a
-+ exec go get -v -d
-+ exec go install -v
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/config
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/utils
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/grace
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/session
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/logs
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/context
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego/toolbox
-github.com/openshift/golang-ex/vendor/github.com/Unknwon/goconfig
-github.com/openshift/golang-ex/vendor/github.com/astaxie/beego
-github.com/openshift/golang-ex/vendor/github.com/beego/i18n
-github.com/openshift/golang-ex/vendor/github.com/gorilla/websocket
-github.com/openshift/golang-ex/models
-github.com/openshift/golang-ex/controllers
-github.com/openshift/golang-ex
- ---> f91517380de3
-Removing intermediate container 26f41423327a
-Step 7 : CMD go-wrapper run
- ---> Running in c99ec8507c23
- ---> 01c4d1f5e508
-Removing intermediate container c99ec8507c23
-...
-Successfully built 1d2138f43eab
-I0113 14:19:10.406586       1 docker.go:95] Pushing image 172.30.149.59:5000/demo/beego-example:latest ...
-I0113 14:19:12.002300       1 docker.go:99] Push successful
 ```
 
 ### Accessing the application
