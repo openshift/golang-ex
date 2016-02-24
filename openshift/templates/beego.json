@@ -5,7 +5,7 @@
     "name": "beego-example",
     "annotations": {
       "description": "An example Beego (http://beego.me/) application written in Golang",
-      "tags": "instant-app,golang",
+      "tags": "quickstart,golang",
       "iconClass": "icon-golang"
     }
   },
