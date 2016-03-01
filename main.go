@@ -16,6 +16,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/astaxie/beego"
 	"github.com/beego/i18n"
 
@@ -24,6 +26,11 @@ import (
 
 const (
 	APP_VER = "0.1.1.0227"
+)
+
+var (
+	servingCertFile = os.Getenv("SERVING_CERT")
+	servingKeyFile  = os.Getenv("SERVING_KEY")
 )
 
 func main() {
@@ -45,6 +52,15 @@ func main() {
 
 	// Register template functions.
 	beego.AddFuncMap("i18n", i18n.Tr)
+
+	// serve securely if the certificates are present
+	_, certErr := os.Stat(servingCertFile)
+	_, keyErr := os.Stat(servingKeyFile)
+	if certErr == nil && keyErr == nil && len(servingCertFile) > 0 && len(servingKeyFile) > 0 {
+		beego.HttpCertFile = servingCertFile
+		beego.HttpKeyFile = servingKeyFile
+		beego.EnableHttpTLS = true
+	}
 
 	beego.Run()
 }
