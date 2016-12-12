@@ -9,7 +9,7 @@ This example was copied from the official [beego samples](https://github.com/bee
 
 If you'd like to install it, follow [these instructions](https://github.com/openshift/golang-ex/blob/master/README.md#installation).
 
-The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on, including the default set of ImageStreams defined.  Instructions for installing the default ImageStreams are available [here](http://docs.openshift.org/latest/admin_guide/install/first_steps.html).  If you are defining the set of ImageStreams now, remember to pass in the proper cluster-admin credentials and to create the ImageStreams in the 'openshift' namespace.
+The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on, including the default set of ImageStreams defined.  Instructions for installing the default ImageStreams are available [here](https://docs.openshift.org/latest/install_config/imagestreams_templates.html).  If you are defining the set of ImageStreams now, remember to pass in the proper cluster-admin credentials and to create the ImageStreams in the 'openshift' namespace.
 
 ### Installation
 
