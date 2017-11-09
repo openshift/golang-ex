@@ -10,7 +10,8 @@
     }
   },
   "labels": {
-    "template": "beego-example"
+      "template": "beego-example",
+      "app": "beego-example"
   },
   "objects": [
     {
