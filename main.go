@@ -34,7 +34,7 @@ var (
 )
 
 func main() {
-	beego.Info(beego.AppName, APP_VER)
+	beego.Info(beego.AppConfig.String("appname"), APP_VER)
 
 	// Register routers.
 	beego.Router("/", &controllers.AppController{})
@@ -57,9 +57,9 @@ func main() {
 	_, certErr := os.Stat(servingCertFile)
 	_, keyErr := os.Stat(servingKeyFile)
 	if certErr == nil && keyErr == nil && len(servingCertFile) > 0 && len(servingKeyFile) > 0 {
-		beego.HttpCertFile = servingCertFile
-		beego.HttpKeyFile = servingKeyFile
-		beego.EnableHttpTLS = true
+		beego.BConfig.Listen.HTTPSCertFile = servingCertFile
+		beego.BConfig.Listen.HTTPSKeyFile = servingKeyFile
+		beego.BConfig.Listen.EnableHTTPS = true
 	}
 
 	beego.Run()

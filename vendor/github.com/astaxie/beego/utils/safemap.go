@@ -18,6 +18,7 @@ import (
 	"sync"
 )
 
+// BeeMap is a map with lock
 type BeeMap struct {
 	lock *sync.RWMutex
 	bm   map[interface{}]interface{}
@@ -41,7 +42,7 @@ func (m *BeeMap) Get(k interface{}) interface{} {
 	return nil
 }
 
-// Maps the given key and value. Returns false
+// Set Maps the given key and value. Returns false
 // if the key is already in the map and changes nothing.
 func (m *BeeMap) Set(k interface{}, v interface{}) bool {
 	m.lock.Lock()
@@ -56,14 +57,12 @@ func (m *BeeMap) Set(k interface{}, v interface{}) bool {
 	return true
 }
 
-// Returns true if k is exist in the map.
+// Check Returns true if k is exist in the map.
 func (m *BeeMap) Check(k interface{}) bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
-	if _, ok := m.bm[k]; !ok {
-		return false
-	}
-	return true
+	_, ok := m.bm[k]
+	return ok
 }
 
 // Delete the given key and value.
@@ -82,4 +81,11 @@ func (m *BeeMap) Items() map[interface{}]interface{} {
 		r[k] = v
 	}
 	return r
+}
+
+// Count returns the number of items within the map.
+func (m *BeeMap) Count() int {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return len(m.bm)
 }
