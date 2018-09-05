@@ -16,190 +16,485 @@ package beego
 
 import (
 	"fmt"
-	"html/template"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 
 	"github.com/astaxie/beego/config"
+	"github.com/astaxie/beego/context"
 	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/session"
 	"github.com/astaxie/beego/utils"
 )
 
-var (
-	BeeApp                 *App // beego application
-	AppName                string
-	AppPath                string
-	workPath               string
-	AppConfigPath          string
-	StaticDir              map[string]string
-	TemplateCache          map[string]*template.Template // template caching map
-	StaticExtensionsToGzip []string                      // files with should be compressed with gzip (.js,.css,etc)
-	EnableHttpListen       bool
-	HttpAddr               string
-	HttpPort               int
-	ListenTCP4             bool
-	EnableHttpTLS          bool
-	HttpsPort              int
-	HttpCertFile           string
-	HttpKeyFile            string
-	RecoverPanic           bool // flag of auto recover panic
-	AutoRender             bool // flag of render template automatically
-	ViewsPath              string
-	AppConfig              *beegoAppConfig
-	RunMode                string           // run mode, "dev" or "prod"
-	GlobalSessions         *session.Manager // global session mananger
-	SessionOn              bool             // flag of starting session auto. default is false.
-	SessionProvider        string           // default session provider, memory, mysql , redis ,etc.
-	SessionName            string           // the cookie name when saving session id into cookie.
-	SessionGCMaxLifetime   int64            // session gc time for auto cleaning expired session.
-	SessionSavePath        string           // if use mysql/redis/file provider, define save path to connection info.
-	SessionCookieLifeTime  int              // the life time of session id in cookie.
-	SessionAutoSetCookie   bool             // auto setcookie
-	SessionDomain          string           // the cookie domain default is empty
-	UseFcgi                bool
-	UseStdIo               bool
-	MaxMemory              int64
-	EnableGzip             bool // flag of enable gzip
-	DirectoryIndex         bool // flag of display directory index. default is false.
-	HttpServerTimeOut      int64
-	ErrorsShow             bool   // flag of show errors in page. if true, show error and trace info in page rendered with error template.
-	XSRFKEY                string // xsrf hash salt string.
-	EnableXSRF             bool   // flag of enable xsrf.
-	XSRFExpire             int    // the expiry of xsrf value.
-	CopyRequestBody        bool   // flag of copy raw request body in context.
-	TemplateLeft           string
-	TemplateRight          string
-	BeegoServerName        string // beego server name exported in response header.
-	EnableAdmin            bool   // flag of enable admin module to log every request info.
-	AdminHttpAddr          string // http server configurations for admin module.
-	AdminHttpPort          int
-	FlashName              string // name of the flash variable found in response header and cookie
-	FlashSeperator         string // used to seperate flash key:value
-	AppConfigProvider      string // config provider
-	EnableDocs             bool   // enable generate docs & server docs API Swagger
-	RouterCaseSensitive    bool   // router case sensitive default is true
-	AccessLogs             bool   // print access logs, default is false
-	Graceful               bool   // use graceful start the server
-)
-
-type beegoAppConfig struct {
-	innerConfig config.ConfigContainer
+// Config is the main struct for BConfig
+type Config struct {
+	AppName             string //Application name
+	RunMode             string //Running Mode: dev | prod
+	RouterCaseSensitive bool
+	ServerName          string
+	RecoverPanic        bool
+	RecoverFunc         func(*context.Context)
+	CopyRequestBody     bool
+	EnableGzip          bool
+	MaxMemory           int64
+	EnableErrorsShow    bool
+	EnableErrorsRender  bool
+	Listen              Listen
+	WebConfig           WebConfig
+	Log                 LogConfig
 }
 
-func newAppConfig(AppConfigProvider, AppConfigPath string) (*beegoAppConfig, error) {
-	ac, err := config.NewConfig(AppConfigProvider, AppConfigPath)
+// Listen holds for http and https related config
+type Listen struct {
+	Graceful          bool // Graceful means use graceful module to start the server
+	ServerTimeOut     int64
+	ListenTCP4        bool
+	EnableHTTP        bool
+	HTTPAddr          string
+	HTTPPort          int
+	AutoTLS           bool
+	Domains           []string
+	TLSCacheDir       string
+	EnableHTTPS       bool
+	EnableMutualHTTPS bool
+	HTTPSAddr         string
+	HTTPSPort         int
+	HTTPSCertFile     string
+	HTTPSKeyFile      string
+	TrustCaFile       string
+	EnableAdmin       bool
+	AdminAddr         string
+	AdminPort         int
+	EnableFcgi        bool
+	EnableStdIo       bool // EnableStdIo works with EnableFcgi Use FCGI via standard I/O
+}
+
+// WebConfig holds web related config
+type WebConfig struct {
+	AutoRender             bool
+	EnableDocs             bool
+	FlashName              string
+	FlashSeparator         string
+	DirectoryIndex         bool
+	StaticDir              map[string]string
+	StaticExtensionsToGzip []string
+	TemplateLeft           string
+	TemplateRight          string
+	ViewsPath              string
+	EnableXSRF             bool
+	XSRFKey                string
+	XSRFExpire             int
+	Session                SessionConfig
+}
+
+// SessionConfig holds session related config
+type SessionConfig struct {
+	SessionOn                    bool
+	SessionProvider              string
+	SessionName                  string
+	SessionGCMaxLifetime         int64
+	SessionProviderConfig        string
+	SessionCookieLifeTime        int
+	SessionAutoSetCookie         bool
+	SessionDomain                string
+	SessionDisableHTTPOnly       bool // used to allow for cross domain cookies/javascript cookies.
+	SessionEnableSidInHTTPHeader bool // enable store/get the sessionId into/from http headers
+	SessionNameInHTTPHeader      string
+	SessionEnableSidInURLQuery   bool // enable get the sessionId from Url Query params
+}
+
+// LogConfig holds Log related config
+type LogConfig struct {
+	AccessLogs       bool
+	EnableStaticLogs bool   //log static files requests default: false
+	AccessLogsFormat string //access log format: JSON_FORMAT, APACHE_FORMAT or empty string
+	FileLineNum      bool
+	Outputs          map[string]string // Store Adaptor : config
+}
+
+var (
+	// BConfig is the default config for Application
+	BConfig *Config
+	// AppConfig is the instance of Config, store the config information from file
+	AppConfig *beegoAppConfig
+	// AppPath is the absolute path to the app
+	AppPath string
+	// GlobalSessions is the instance for the session manager
+	GlobalSessions *session.Manager
+
+	// appConfigPath is the path to the config files
+	appConfigPath string
+	// appConfigProvider is the provider for the config, default is ini
+	appConfigProvider = "ini"
+)
+
+func init() {
+	BConfig = newBConfig()
+	var err error
+	if AppPath, err = filepath.Abs(filepath.Dir(os.Args[0])); err != nil {
+		panic(err)
+	}
+	workPath, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	var filename = "app.conf"
+	if os.Getenv("BEEGO_RUNMODE") != "" {
+		filename = os.Getenv("BEEGO_RUNMODE") + ".app.conf"
+	}
+	appConfigPath = filepath.Join(workPath, "conf", filename)
+	if !utils.FileExists(appConfigPath) {
+		appConfigPath = filepath.Join(AppPath, "conf", filename)
+		if !utils.FileExists(appConfigPath) {
+			AppConfig = &beegoAppConfig{innerConfig: config.NewFakeConfig()}
+			return
+		}
+	}
+	if err = parseConfig(appConfigPath); err != nil {
+		panic(err)
+	}
+}
+
+func recoverPanic(ctx *context.Context) {
+	if err := recover(); err != nil {
+		if err == ErrAbort {
+			return
+		}
+		if !BConfig.RecoverPanic {
+			panic(err)
+		}
+		if BConfig.EnableErrorsShow {
+			if _, ok := ErrorMaps[fmt.Sprint(err)]; ok {
+				exception(fmt.Sprint(err), ctx)
+				return
+			}
+		}
+		var stack string
+		logs.Critical("the request url is ", ctx.Input.URL())
+		logs.Critical("Handler crashed with error", err)
+		for i := 1; ; i++ {
+			_, file, line, ok := runtime.Caller(i)
+			if !ok {
+				break
+			}
+			logs.Critical(fmt.Sprintf("%s:%d", file, line))
+			stack = stack + fmt.Sprintln(fmt.Sprintf("%s:%d", file, line))
+		}
+		if BConfig.RunMode == DEV && BConfig.EnableErrorsRender {
+			showErr(err, ctx, stack)
+		}
+		if ctx.Output.Status != 0 {
+			ctx.ResponseWriter.WriteHeader(ctx.Output.Status)
+		} else {
+			ctx.ResponseWriter.WriteHeader(500)
+		}
+	}
+}
+
+func newBConfig() *Config {
+	return &Config{
+		AppName:             "beego",
+		RunMode:             PROD,
+		RouterCaseSensitive: true,
+		ServerName:          "beegoServer:" + VERSION,
+		RecoverPanic:        true,
+		RecoverFunc:         recoverPanic,
+		CopyRequestBody:     false,
+		EnableGzip:          false,
+		MaxMemory:           1 << 26, //64MB
+		EnableErrorsShow:    true,
+		EnableErrorsRender:  true,
+		Listen: Listen{
+			Graceful:      false,
+			ServerTimeOut: 0,
+			ListenTCP4:    false,
+			EnableHTTP:    true,
+			AutoTLS:       false,
+			Domains:       []string{},
+			TLSCacheDir:   ".",
+			HTTPAddr:      "",
+			HTTPPort:      8080,
+			EnableHTTPS:   false,
+			HTTPSAddr:     "",
+			HTTPSPort:     10443,
+			HTTPSCertFile: "",
+			HTTPSKeyFile:  "",
+			EnableAdmin:   false,
+			AdminAddr:     "",
+			AdminPort:     8088,
+			EnableFcgi:    false,
+			EnableStdIo:   false,
+		},
+		WebConfig: WebConfig{
+			AutoRender:             true,
+			EnableDocs:             false,
+			FlashName:              "BEEGO_FLASH",
+			FlashSeparator:         "BEEGOFLASH",
+			DirectoryIndex:         false,
+			StaticDir:              map[string]string{"/static": "static"},
+			StaticExtensionsToGzip: []string{".css", ".js"},
+			TemplateLeft:           "{{",
+			TemplateRight:          "}}",
+			ViewsPath:              "views",
+			EnableXSRF:             false,
+			XSRFKey:                "beegoxsrf",
+			XSRFExpire:             0,
+			Session: SessionConfig{
+				SessionOn:                    false,
+				SessionProvider:              "memory",
+				SessionName:                  "beegosessionID",
+				SessionGCMaxLifetime:         3600,
+				SessionProviderConfig:        "",
+				SessionDisableHTTPOnly:       false,
+				SessionCookieLifeTime:        0, //set cookie default is the browser life
+				SessionAutoSetCookie:         true,
+				SessionDomain:                "",
+				SessionEnableSidInHTTPHeader: false, // enable store/get the sessionId into/from http headers
+				SessionNameInHTTPHeader:      "Beegosessionid",
+				SessionEnableSidInURLQuery:   false, // enable get the sessionId from Url Query params
+			},
+		},
+		Log: LogConfig{
+			AccessLogs:       false,
+			EnableStaticLogs: false,
+			AccessLogsFormat: "APACHE_FORMAT",
+			FileLineNum:      true,
+			Outputs:          map[string]string{"console": ""},
+		},
+	}
+}
+
+// now only support ini, next will support json.
+func parseConfig(appConfigPath string) (err error) {
+	AppConfig, err = newAppConfig(appConfigProvider, appConfigPath)
+	if err != nil {
+		return err
+	}
+	return assignConfig(AppConfig)
+}
+
+func assignConfig(ac config.Configer) error {
+	for _, i := range []interface{}{BConfig, &BConfig.Listen, &BConfig.WebConfig, &BConfig.Log, &BConfig.WebConfig.Session} {
+		assignSingleConfig(i, ac)
+	}
+	// set the run mode first
+	if envRunMode := os.Getenv("BEEGO_RUNMODE"); envRunMode != "" {
+		BConfig.RunMode = envRunMode
+	} else if runMode := ac.String("RunMode"); runMode != "" {
+		BConfig.RunMode = runMode
+	}
+
+	if sd := ac.String("StaticDir"); sd != "" {
+		BConfig.WebConfig.StaticDir = map[string]string{}
+		sds := strings.Fields(sd)
+		for _, v := range sds {
+			if url2fsmap := strings.SplitN(v, ":", 2); len(url2fsmap) == 2 {
+				BConfig.WebConfig.StaticDir["/"+strings.Trim(url2fsmap[0], "/")] = url2fsmap[1]
+			} else {
+				BConfig.WebConfig.StaticDir["/"+strings.Trim(url2fsmap[0], "/")] = url2fsmap[0]
+			}
+		}
+	}
+
+	if sgz := ac.String("StaticExtensionsToGzip"); sgz != "" {
+		extensions := strings.Split(sgz, ",")
+		fileExts := []string{}
+		for _, ext := range extensions {
+			ext = strings.TrimSpace(ext)
+			if ext == "" {
+				continue
+			}
+			if !strings.HasPrefix(ext, ".") {
+				ext = "." + ext
+			}
+			fileExts = append(fileExts, ext)
+		}
+		if len(fileExts) > 0 {
+			BConfig.WebConfig.StaticExtensionsToGzip = fileExts
+		}
+	}
+
+	if lo := ac.String("LogOutputs"); lo != "" {
+		// if lo is not nil or empty
+		// means user has set his own LogOutputs
+		// clear the default setting to BConfig.Log.Outputs
+		BConfig.Log.Outputs = make(map[string]string)
+		los := strings.Split(lo, ";")
+		for _, v := range los {
+			if logType2Config := strings.SplitN(v, ",", 2); len(logType2Config) == 2 {
+				BConfig.Log.Outputs[logType2Config[0]] = logType2Config[1]
+			} else {
+				continue
+			}
+		}
+	}
+
+	//init log
+	logs.Reset()
+	for adaptor, config := range BConfig.Log.Outputs {
+		err := logs.SetLogger(adaptor, config)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("%s with the config %q got err:%s", adaptor, config, err.Error()))
+		}
+	}
+	logs.SetLogFuncCall(BConfig.Log.FileLineNum)
+
+	return nil
+}
+
+func assignSingleConfig(p interface{}, ac config.Configer) {
+	pt := reflect.TypeOf(p)
+	if pt.Kind() != reflect.Ptr {
+		return
+	}
+	pt = pt.Elem()
+	if pt.Kind() != reflect.Struct {
+		return
+	}
+	pv := reflect.ValueOf(p).Elem()
+
+	for i := 0; i < pt.NumField(); i++ {
+		pf := pv.Field(i)
+		if !pf.CanSet() {
+			continue
+		}
+		name := pt.Field(i).Name
+		switch pf.Kind() {
+		case reflect.String:
+			pf.SetString(ac.DefaultString(name, pf.String()))
+		case reflect.Int, reflect.Int64:
+			pf.SetInt(ac.DefaultInt64(name, pf.Int()))
+		case reflect.Bool:
+			pf.SetBool(ac.DefaultBool(name, pf.Bool()))
+		case reflect.Struct:
+		default:
+			//do nothing here
+		}
+	}
+
+}
+
+// LoadAppConfig allow developer to apply a config file
+func LoadAppConfig(adapterName, configPath string) error {
+	absConfigPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return err
+	}
+
+	if !utils.FileExists(absConfigPath) {
+		return fmt.Errorf("the target config file: %s don't exist", configPath)
+	}
+
+	appConfigPath = absConfigPath
+	appConfigProvider = adapterName
+
+	return parseConfig(appConfigPath)
+}
+
+type beegoAppConfig struct {
+	innerConfig config.Configer
+}
+
+func newAppConfig(appConfigProvider, appConfigPath string) (*beegoAppConfig, error) {
+	ac, err := config.NewConfig(appConfigProvider, appConfigPath)
 	if err != nil {
 		return nil, err
 	}
-	rac := &beegoAppConfig{ac}
-	return rac, nil
+	return &beegoAppConfig{ac}, nil
 }
 
 func (b *beegoAppConfig) Set(key, val string) error {
-	err := b.innerConfig.Set(RunMode+"::"+key, val)
-	if err == nil {
+	if err := b.innerConfig.Set(BConfig.RunMode+"::"+key, val); err != nil {
 		return err
 	}
 	return b.innerConfig.Set(key, val)
 }
 
 func (b *beegoAppConfig) String(key string) string {
-	v := b.innerConfig.String(RunMode + "::" + key)
-	if v == "" {
-		return b.innerConfig.String(key)
+	if v := b.innerConfig.String(BConfig.RunMode + "::" + key); v != "" {
+		return v
 	}
-	return v
+	return b.innerConfig.String(key)
 }
 
 func (b *beegoAppConfig) Strings(key string) []string {
-	v := b.innerConfig.Strings(RunMode + "::" + key)
-	if v[0] == "" {
-		return b.innerConfig.Strings(key)
+	if v := b.innerConfig.Strings(BConfig.RunMode + "::" + key); len(v) > 0 {
+		return v
 	}
-	return v
+	return b.innerConfig.Strings(key)
 }
 
 func (b *beegoAppConfig) Int(key string) (int, error) {
-	v, err := b.innerConfig.Int(RunMode + "::" + key)
-	if err != nil {
-		return b.innerConfig.Int(key)
+	if v, err := b.innerConfig.Int(BConfig.RunMode + "::" + key); err == nil {
+		return v, nil
 	}
-	return v, nil
+	return b.innerConfig.Int(key)
 }
 
 func (b *beegoAppConfig) Int64(key string) (int64, error) {
-	v, err := b.innerConfig.Int64(RunMode + "::" + key)
-	if err != nil {
-		return b.innerConfig.Int64(key)
+	if v, err := b.innerConfig.Int64(BConfig.RunMode + "::" + key); err == nil {
+		return v, nil
 	}
-	return v, nil
+	return b.innerConfig.Int64(key)
 }
 
 func (b *beegoAppConfig) Bool(key string) (bool, error) {
-	v, err := b.innerConfig.Bool(RunMode + "::" + key)
-	if err != nil {
-		return b.innerConfig.Bool(key)
+	if v, err := b.innerConfig.Bool(BConfig.RunMode + "::" + key); err == nil {
+		return v, nil
 	}
-	return v, nil
+	return b.innerConfig.Bool(key)
 }
 
 func (b *beegoAppConfig) Float(key string) (float64, error) {
-	v, err := b.innerConfig.Float(RunMode + "::" + key)
-	if err != nil {
-		return b.innerConfig.Float(key)
+	if v, err := b.innerConfig.Float(BConfig.RunMode + "::" + key); err == nil {
+		return v, nil
 	}
-	return v, nil
+	return b.innerConfig.Float(key)
 }
 
-func (b *beegoAppConfig) DefaultString(key string, defaultval string) string {
-	v := b.String(key)
-	if v != "" {
+func (b *beegoAppConfig) DefaultString(key string, defaultVal string) string {
+	if v := b.String(key); v != "" {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
-func (b *beegoAppConfig) DefaultStrings(key string, defaultval []string) []string {
-	v := b.Strings(key)
-	if len(v) != 0 {
+func (b *beegoAppConfig) DefaultStrings(key string, defaultVal []string) []string {
+	if v := b.Strings(key); len(v) != 0 {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
-func (b *beegoAppConfig) DefaultInt(key string, defaultval int) int {
-	v, err := b.Int(key)
-	if err == nil {
+func (b *beegoAppConfig) DefaultInt(key string, defaultVal int) int {
+	if v, err := b.Int(key); err == nil {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
-func (b *beegoAppConfig) DefaultInt64(key string, defaultval int64) int64 {
-	v, err := b.Int64(key)
-	if err == nil {
+func (b *beegoAppConfig) DefaultInt64(key string, defaultVal int64) int64 {
+	if v, err := b.Int64(key); err == nil {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
-func (b *beegoAppConfig) DefaultBool(key string, defaultval bool) bool {
-	v, err := b.Bool(key)
-	if err == nil {
+func (b *beegoAppConfig) DefaultBool(key string, defaultVal bool) bool {
+	if v, err := b.Bool(key); err == nil {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
-func (b *beegoAppConfig) DefaultFloat(key string, defaultval float64) float64 {
-	v, err := b.Float(key)
-	if err == nil {
+func (b *beegoAppConfig) DefaultFloat(key string, defaultVal float64) float64 {
+	if v, err := b.Float(key); err == nil {
 		return v
 	}
-	return defaultval
+	return defaultVal
 }
 
 func (b *beegoAppConfig) DIY(key string) (interface{}, error) {
@@ -212,306 +507,4 @@ func (b *beegoAppConfig) GetSection(section string) (map[string]string, error) {
 
 func (b *beegoAppConfig) SaveConfigFile(filename string) error {
 	return b.innerConfig.SaveConfigFile(filename)
-}
-
-func init() {
-	// create beego application
-	BeeApp = NewApp()
-
-	workPath, _ = os.Getwd()
-	workPath, _ = filepath.Abs(workPath)
-	// initialize default configurations
-	AppPath, _ = filepath.Abs(filepath.Dir(os.Args[0]))
-
-	AppConfigPath = filepath.Join(AppPath, "conf", "app.conf")
-
-	if workPath != AppPath {
-		if utils.FileExists(AppConfigPath) {
-			os.Chdir(AppPath)
-		} else {
-			AppConfigPath = filepath.Join(workPath, "conf", "app.conf")
-		}
-	}
-
-	AppConfigProvider = "ini"
-
-	StaticDir = make(map[string]string)
-	StaticDir["/static"] = "static"
-
-	StaticExtensionsToGzip = []string{".css", ".js"}
-
-	TemplateCache = make(map[string]*template.Template)
-
-	// set this to 0.0.0.0 to make this app available to externally
-	EnableHttpListen = true //default enable http Listen
-
-	HttpAddr = ""
-	HttpPort = 8080
-
-	HttpsPort = 10443
-
-	AppName = "beego"
-
-	RunMode = "dev" //default runmod
-
-	AutoRender = true
-
-	RecoverPanic = true
-
-	ViewsPath = "views"
-
-	SessionOn = false
-	SessionProvider = "memory"
-	SessionName = "beegosessionID"
-	SessionGCMaxLifetime = 3600
-	SessionSavePath = ""
-	SessionCookieLifeTime = 0 //set cookie default is the brower life
-	SessionAutoSetCookie = true
-
-	UseFcgi = false
-	UseStdIo = false
-
-	MaxMemory = 1 << 26 //64MB
-
-	EnableGzip = false
-
-	HttpServerTimeOut = 0
-
-	ErrorsShow = true
-
-	XSRFKEY = "beegoxsrf"
-	XSRFExpire = 0
-
-	TemplateLeft = "{{"
-	TemplateRight = "}}"
-
-	BeegoServerName = "beegoServer:" + VERSION
-
-	EnableAdmin = false
-	AdminHttpAddr = "127.0.0.1"
-	AdminHttpPort = 8088
-
-	FlashName = "BEEGO_FLASH"
-	FlashSeperator = "BEEGOFLASH"
-
-	RouterCaseSensitive = true
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	// init BeeLogger
-	BeeLogger = logs.NewLogger(10000)
-	err := BeeLogger.SetLogger("console", "")
-	if err != nil {
-		fmt.Println("init console log error:", err)
-	}
-	SetLogFuncCall(true)
-
-	err = ParseConfig()
-	if err != nil && os.IsNotExist(err) {
-		// for init if doesn't have app.conf will not panic
-		ac := config.NewFakeConfig()
-		AppConfig = &beegoAppConfig{ac}
-		Warning(err)
-	}
-}
-
-// ParseConfig parsed default config file.
-// now only support ini, next will support json.
-func ParseConfig() (err error) {
-	AppConfig, err = newAppConfig(AppConfigProvider, AppConfigPath)
-	if err != nil {
-		return err
-	}
-	envRunMode := os.Getenv("BEEGO_RUNMODE")
-	// set the runmode first
-	if envRunMode != "" {
-		RunMode = envRunMode
-	} else if runmode := AppConfig.String("RunMode"); runmode != "" {
-		RunMode = runmode
-	}
-
-	HttpAddr = AppConfig.String("HttpAddr")
-
-	if v, err := AppConfig.Int("HttpPort"); err == nil {
-		HttpPort = v
-	}
-
-	if v, err := AppConfig.Bool("ListenTCP4"); err == nil {
-		ListenTCP4 = v
-	}
-
-	if v, err := AppConfig.Bool("EnableHttpListen"); err == nil {
-		EnableHttpListen = v
-	}
-
-	if maxmemory, err := AppConfig.Int64("MaxMemory"); err == nil {
-		MaxMemory = maxmemory
-	}
-
-	if appname := AppConfig.String("AppName"); appname != "" {
-		AppName = appname
-	}
-
-	if autorender, err := AppConfig.Bool("AutoRender"); err == nil {
-		AutoRender = autorender
-	}
-
-	if autorecover, err := AppConfig.Bool("RecoverPanic"); err == nil {
-		RecoverPanic = autorecover
-	}
-
-	if views := AppConfig.String("ViewsPath"); views != "" {
-		ViewsPath = views
-	}
-
-	if sessionon, err := AppConfig.Bool("SessionOn"); err == nil {
-		SessionOn = sessionon
-	}
-
-	if sessProvider := AppConfig.String("SessionProvider"); sessProvider != "" {
-		SessionProvider = sessProvider
-	}
-
-	if sessName := AppConfig.String("SessionName"); sessName != "" {
-		SessionName = sessName
-	}
-
-	if sesssavepath := AppConfig.String("SessionSavePath"); sesssavepath != "" {
-		SessionSavePath = sesssavepath
-	}
-
-	if sessMaxLifeTime, err := AppConfig.Int64("SessionGCMaxLifetime"); err == nil && sessMaxLifeTime != 0 {
-		SessionGCMaxLifetime = sessMaxLifeTime
-	}
-
-	if sesscookielifetime, err := AppConfig.Int("SessionCookieLifeTime"); err == nil && sesscookielifetime != 0 {
-		SessionCookieLifeTime = sesscookielifetime
-	}
-
-	if usefcgi, err := AppConfig.Bool("UseFcgi"); err == nil {
-		UseFcgi = usefcgi
-	}
-
-	if enablegzip, err := AppConfig.Bool("EnableGzip"); err == nil {
-		EnableGzip = enablegzip
-	}
-
-	if directoryindex, err := AppConfig.Bool("DirectoryIndex"); err == nil {
-		DirectoryIndex = directoryindex
-	}
-
-	if timeout, err := AppConfig.Int64("HttpServerTimeOut"); err == nil {
-		HttpServerTimeOut = timeout
-	}
-
-	if errorsshow, err := AppConfig.Bool("ErrorsShow"); err == nil {
-		ErrorsShow = errorsshow
-	}
-
-	if copyrequestbody, err := AppConfig.Bool("CopyRequestBody"); err == nil {
-		CopyRequestBody = copyrequestbody
-	}
-
-	if xsrfkey := AppConfig.String("XSRFKEY"); xsrfkey != "" {
-		XSRFKEY = xsrfkey
-	}
-
-	if enablexsrf, err := AppConfig.Bool("EnableXSRF"); err == nil {
-		EnableXSRF = enablexsrf
-	}
-
-	if expire, err := AppConfig.Int("XSRFExpire"); err == nil {
-		XSRFExpire = expire
-	}
-
-	if tplleft := AppConfig.String("TemplateLeft"); tplleft != "" {
-		TemplateLeft = tplleft
-	}
-
-	if tplright := AppConfig.String("TemplateRight"); tplright != "" {
-		TemplateRight = tplright
-	}
-
-	if httptls, err := AppConfig.Bool("EnableHttpTLS"); err == nil {
-		EnableHttpTLS = httptls
-	}
-
-	if httpsport, err := AppConfig.Int("HttpsPort"); err == nil {
-		HttpsPort = httpsport
-	}
-
-	if certfile := AppConfig.String("HttpCertFile"); certfile != "" {
-		HttpCertFile = certfile
-	}
-
-	if keyfile := AppConfig.String("HttpKeyFile"); keyfile != "" {
-		HttpKeyFile = keyfile
-	}
-
-	if serverName := AppConfig.String("BeegoServerName"); serverName != "" {
-		BeegoServerName = serverName
-	}
-
-	if flashname := AppConfig.String("FlashName"); flashname != "" {
-		FlashName = flashname
-	}
-
-	if flashseperator := AppConfig.String("FlashSeperator"); flashseperator != "" {
-		FlashSeperator = flashseperator
-	}
-
-	if sd := AppConfig.String("StaticDir"); sd != "" {
-		for k := range StaticDir {
-			delete(StaticDir, k)
-		}
-		sds := strings.Fields(sd)
-		for _, v := range sds {
-			if url2fsmap := strings.SplitN(v, ":", 2); len(url2fsmap) == 2 {
-				StaticDir["/"+strings.TrimRight(url2fsmap[0], "/")] = url2fsmap[1]
-			} else {
-				StaticDir["/"+strings.TrimRight(url2fsmap[0], "/")] = url2fsmap[0]
-			}
-		}
-	}
-
-	if sgz := AppConfig.String("StaticExtensionsToGzip"); sgz != "" {
-		extensions := strings.Split(sgz, ",")
-		if len(extensions) > 0 {
-			StaticExtensionsToGzip = []string{}
-			for _, ext := range extensions {
-				if len(ext) == 0 {
-					continue
-				}
-				extWithDot := ext
-				if extWithDot[:1] != "." {
-					extWithDot = "." + extWithDot
-				}
-				StaticExtensionsToGzip = append(StaticExtensionsToGzip, extWithDot)
-			}
-		}
-	}
-
-	if enableadmin, err := AppConfig.Bool("EnableAdmin"); err == nil {
-		EnableAdmin = enableadmin
-	}
-
-	if adminhttpaddr := AppConfig.String("AdminHttpAddr"); adminhttpaddr != "" {
-		AdminHttpAddr = adminhttpaddr
-	}
-
-	if adminhttpport, err := AppConfig.Int("AdminHttpPort"); err == nil {
-		AdminHttpPort = adminhttpport
-	}
-
-	if enabledocs, err := AppConfig.Bool("EnableDocs"); err == nil {
-		EnableDocs = enabledocs
-	}
-
-	if casesensitive, err := AppConfig.Bool("RouterCaseSensitive"); err == nil {
-		RouterCaseSensitive = casesensitive
-	}
-	if graceful, err := AppConfig.Bool("Graceful"); err == nil {
-		Graceful = graceful
-	}
-	return nil
 }

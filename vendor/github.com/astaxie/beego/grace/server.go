@@ -2,7 +2,9 @@ package grace
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -15,7 +17,8 @@ import (
 	"time"
 )
 
-type graceServer struct {
+// Server embedded http.Server
+type Server struct {
 	*http.Server
 	GraceListener    net.Listener
 	SignalHooks      map[int]map[os.Signal][]func()
@@ -30,19 +33,19 @@ type graceServer struct {
 // Serve accepts incoming connections on the Listener l,
 // creating a new service goroutine for each.
 // The service goroutines read requests and then call srv.Handler to reply to them.
-func (srv *graceServer) Serve() (err error) {
-	srv.state = STATE_RUNNING
+func (srv *Server) Serve() (err error) {
+	srv.state = StateRunning
 	err = srv.Server.Serve(srv.GraceListener)
 	log.Println(syscall.Getpid(), "Waiting for connections to finish...")
 	srv.wg.Wait()
-	srv.state = STATE_TERMINATE
+	srv.state = StateTerminate
 	return
 }
 
 // ListenAndServe listens on the TCP network address srv.Addr and then calls Serve
 // to handle requests on incoming connections. If srv.Addr is blank, ":http" is
 // used.
-func (srv *graceServer) ListenAndServe() (err error) {
+func (srv *Server) ListenAndServe() (err error) {
 	addr := srv.Addr
 	if addr == "" {
 		addr = ":http"
@@ -64,7 +67,7 @@ func (srv *graceServer) ListenAndServe() (err error) {
 			log.Println(err)
 			return err
 		}
-		err = process.Kill()
+		err = process.Signal(syscall.SIGTERM)
 		if err != nil {
 			return err
 		}
@@ -83,22 +86,21 @@ func (srv *graceServer) ListenAndServe() (err error) {
 // CA's certificate.
 //
 // If srv.Addr is blank, ":https" is used.
-func (srv *graceServer) ListenAndServeTLS(certFile, keyFile string) (err error) {
+func (srv *Server) ListenAndServeTLS(certFile, keyFile string) (err error) {
 	addr := srv.Addr
 	if addr == "" {
 		addr = ":https"
 	}
 
-	config := &tls.Config{}
-	if srv.TLSConfig != nil {
-		*config = *srv.TLSConfig
+	if srv.TLSConfig == nil {
+		srv.TLSConfig = &tls.Config{}
 	}
-	if config.NextProtos == nil {
-		config.NextProtos = []string{"http/1.1"}
+	if srv.TLSConfig.NextProtos == nil {
+		srv.TLSConfig.NextProtos = []string{"http/1.1"}
 	}
 
-	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	srv.TLSConfig.Certificates = make([]tls.Certificate, 1)
+	srv.TLSConfig.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return
 	}
@@ -112,7 +114,63 @@ func (srv *graceServer) ListenAndServeTLS(certFile, keyFile string) (err error) 
 	}
 
 	srv.tlsInnerListener = newGraceListener(l, srv)
-	srv.GraceListener = tls.NewListener(srv.tlsInnerListener, config)
+	srv.GraceListener = tls.NewListener(srv.tlsInnerListener, srv.TLSConfig)
+
+	if srv.isChild {
+		process, err := os.FindProcess(os.Getppid())
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		err = process.Signal(syscall.SIGTERM)
+		if err != nil {
+			return err
+		}
+	}
+	log.Println(os.Getpid(), srv.Addr)
+	return srv.Serve()
+}
+
+// ListenAndServeMutualTLS listens on the TCP network address srv.Addr and then calls
+// Serve to handle requests on incoming mutual TLS connections.
+func (srv *Server) ListenAndServeMutualTLS(certFile, keyFile, trustFile string) (err error) {
+	addr := srv.Addr
+	if addr == "" {
+		addr = ":https"
+	}
+
+	if srv.TLSConfig == nil {
+		srv.TLSConfig = &tls.Config{}
+	}
+	if srv.TLSConfig.NextProtos == nil {
+		srv.TLSConfig.NextProtos = []string{"http/1.1"}
+	}
+
+	srv.TLSConfig.Certificates = make([]tls.Certificate, 1)
+	srv.TLSConfig.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return
+	}
+	srv.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	pool := x509.NewCertPool()
+	data, err := ioutil.ReadFile(trustFile)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	pool.AppendCertsFromPEM(data)
+	srv.TLSConfig.ClientCAs = pool
+	log.Println("Mutual HTTPS")
+	go srv.handleSignals()
+
+	l, err := srv.getListener(addr)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	srv.tlsInnerListener = newGraceListener(l, srv)
+	srv.GraceListener = tls.NewListener(srv.tlsInnerListener, srv.TLSConfig)
 
 	if srv.isChild {
 		process, err := os.FindProcess(os.Getppid())
@@ -131,9 +189,9 @@ func (srv *graceServer) ListenAndServeTLS(certFile, keyFile string) (err error) 
 
 // getListener either opens a new socket to listen on, or takes the acceptor socket
 // it got passed when restarted.
-func (srv *graceServer) getListener(laddr string) (l net.Listener, err error) {
+func (srv *Server) getListener(laddr string) (l net.Listener, err error) {
 	if srv.isChild {
-		var ptrOffset uint = 0
+		var ptrOffset uint
 		if len(socketPtrOffsetMap) > 0 {
 			ptrOffset = socketPtrOffsetMap[laddr]
 			log.Println("laddr", laddr, "ptr offset", socketPtrOffsetMap[laddr])
@@ -157,20 +215,18 @@ func (srv *graceServer) getListener(laddr string) (l net.Listener, err error) {
 
 // handleSignals listens for os Signals and calls any hooked in function that the
 // user had registered with the signal.
-func (srv *graceServer) handleSignals() {
+func (srv *Server) handleSignals() {
 	var sig os.Signal
 
 	signal.Notify(
 		srv.sigChan,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
+		hookableSignals...,
 	)
 
 	pid := syscall.Getpid()
 	for {
 		sig = <-srv.sigChan
-		srv.signalHooks(PRE_SIGNAL, sig)
+		srv.signalHooks(PreSignal, sig)
 		switch sig {
 		case syscall.SIGHUP:
 			log.Println(pid, "Received SIGHUP. forking.")
@@ -187,29 +243,28 @@ func (srv *graceServer) handleSignals() {
 		default:
 			log.Printf("Received %v: nothing i care about...\n", sig)
 		}
-		srv.signalHooks(POST_SIGNAL, sig)
+		srv.signalHooks(PostSignal, sig)
 	}
 }
 
-func (srv *graceServer) signalHooks(ppFlag int, sig os.Signal) {
+func (srv *Server) signalHooks(ppFlag int, sig os.Signal) {
 	if _, notSet := srv.SignalHooks[ppFlag][sig]; !notSet {
 		return
 	}
 	for _, f := range srv.SignalHooks[ppFlag][sig] {
 		f()
 	}
-	return
 }
 
 // shutdown closes the listener so that no new connections are accepted. it also
 // starts a goroutine that will serverTimeout (stop all running requests) the server
 // after DefaultTimeout.
-func (srv *graceServer) shutdown() {
-	if srv.state != STATE_RUNNING {
+func (srv *Server) shutdown() {
+	if srv.state != StateRunning {
 		return
 	}
 
-	srv.state = STATE_SHUTTING_DOWN
+	srv.state = StateShuttingDown
 	if DefaultTimeout >= 0 {
 		go srv.serverTimeout(DefaultTimeout)
 	}
@@ -224,26 +279,26 @@ func (srv *graceServer) shutdown() {
 // serverTimeout forces the server to shutdown in a given timeout - whether it
 // finished outstanding requests or not. if Read/WriteTimeout are not set or the
 // max header size is very big a connection could hang
-func (srv *graceServer) serverTimeout(d time.Duration) {
+func (srv *Server) serverTimeout(d time.Duration) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("WaitGroup at 0", r)
 		}
 	}()
-	if srv.state != STATE_SHUTTING_DOWN {
+	if srv.state != StateShuttingDown {
 		return
 	}
 	time.Sleep(d)
 	log.Println("[STOP - Hammer Time] Forcefully shutting down parent")
 	for {
-		if srv.state == STATE_TERMINATE {
+		if srv.state == StateTerminate {
 			break
 		}
 		srv.wg.Done()
 	}
 }
 
-func (srv *graceServer) fork() (err error) {
+func (srv *Server) fork() (err error) {
 	regLock.Lock()
 	defer regLock.Unlock()
 	if runningServersForked {
@@ -288,5 +343,21 @@ func (srv *graceServer) fork() (err error) {
 		log.Fatalf("Restart: Failed to launch, error: %v", err)
 	}
 
+	return
+}
+
+// RegisterSignalHook registers a function to be run PreSignal or PostSignal for a given signal.
+func (srv *Server) RegisterSignalHook(ppFlag int, sig os.Signal, f func()) (err error) {
+	if ppFlag != PreSignal && ppFlag != PostSignal {
+		err = fmt.Errorf("Invalid ppFlag argument. Must be either grace.PreSignal or grace.PostSignal")
+		return
+	}
+	for _, s := range hookableSignals {
+		if s == sig {
+			srv.SignalHooks[ppFlag][sig] = append(srv.SignalHooks[ppFlag][sig], f)
+			return
+		}
+	}
+	err = fmt.Errorf("Signal '%v' is not supported", sig)
 	return
 }

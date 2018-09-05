@@ -11,17 +11,17 @@ type graceListener struct {
 	net.Listener
 	stop    chan error
 	stopped bool
-	server  *graceServer
+	server  *Server
 }
 
-func newGraceListener(l net.Listener, srv *graceServer) (el *graceListener) {
+func newGraceListener(l net.Listener, srv *Server) (el *graceListener) {
 	el = &graceListener{
 		Listener: l,
 		stop:     make(chan error),
 		server:   srv,
 	}
 	go func() {
-		_ = <-el.stop
+		<-el.stop
 		el.stopped = true
 		el.stop <- el.Listener.Close()
 	}()
@@ -37,7 +37,7 @@ func (gl *graceListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 
-	c = graceConn{
+	c = &graceConn{
 		Conn:   tc,
 		server: gl.server,
 	}
@@ -46,17 +46,17 @@ func (gl *graceListener) Accept() (c net.Conn, err error) {
 	return
 }
 
-func (el *graceListener) Close() error {
-	if el.stopped {
+func (gl *graceListener) Close() error {
+	if gl.stopped {
 		return syscall.EINVAL
 	}
-	el.stop <- nil
-	return <-el.stop
+	gl.stop <- nil
+	return <-gl.stop
 }
 
-func (el *graceListener) File() *os.File {
+func (gl *graceListener) File() *os.File {
 	// returns a dup(2) - FD_CLOEXEC flag *not* set
-	tl := el.Listener.(*net.TCPListener)
+	tl := gl.Listener.(*net.TCPListener)
 	fl, _ := tl.File()
 	return fl
 }

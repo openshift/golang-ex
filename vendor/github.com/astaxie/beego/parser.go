@@ -23,10 +23,15 @@ import (
 	"go/token"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 
+	"github.com/astaxie/beego/context/param"
+	"github.com/astaxie/beego/logs"
 	"github.com/astaxie/beego/utils"
 )
 
@@ -34,6 +39,7 @@ var globalRouterTemplate = `package routers
 
 import (
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/context/param"
 )
 
 func init() {
@@ -42,23 +48,24 @@ func init() {
 `
 
 var (
-	lastupdateFilename string = "lastupdate.tmp"
+	lastupdateFilename = "lastupdate.tmp"
 	commentFilename    string
 	pkgLastupdate      map[string]int64
 	genInfoList        map[string][]ControllerComments
 )
 
-const COMMENTFL = "commentsRouter_"
+const commentPrefix = "commentsRouter_"
 
 func init() {
 	pkgLastupdate = make(map[string]int64)
 }
 
 func parserPkg(pkgRealpath, pkgpath string) error {
-	rep := strings.NewReplacer("/", "_", ".", "_")
-	commentFilename = COMMENTFL + rep.Replace(pkgpath) + ".go"
+	rep := strings.NewReplacer("\\", "_", "/", "_", ".", "_")
+	commentFilename, _ = filepath.Rel(AppPath, pkgRealpath)
+	commentFilename = commentPrefix + rep.Replace(commentFilename) + ".go"
 	if !compareFile(pkgRealpath) {
-		Info(pkgRealpath + " has not changed, not reloading")
+		logs.Info(pkgRealpath + " no changed")
 		return nil
 	}
 	genInfoList = make(map[string][]ControllerComments)
@@ -77,48 +84,48 @@ func parserPkg(pkgRealpath, pkgpath string) error {
 				switch specDecl := d.(type) {
 				case *ast.FuncDecl:
 					if specDecl.Recv != nil {
-						parserComments(specDecl.Doc, specDecl.Name.String(), fmt.Sprint(specDecl.Recv.List[0].Type.(*ast.StarExpr).X), pkgpath)
+						exp, ok := specDecl.Recv.List[0].Type.(*ast.StarExpr) // Check that the type is correct first beforing throwing to parser
+						if ok {
+							parserComments(specDecl, fmt.Sprint(exp.X), pkgpath)
+						}
 					}
 				}
 			}
 		}
 	}
-	genRouterCode()
+	genRouterCode(pkgRealpath)
 	savetoFile(pkgRealpath)
 	return nil
 }
 
-func parserComments(comments *ast.CommentGroup, funcName, controllerName, pkgpath string) error {
-	if comments != nil && comments.List != nil {
-		for _, c := range comments.List {
-			t := strings.TrimSpace(strings.TrimLeft(c.Text, "//"))
-			if strings.HasPrefix(t, "@router") {
-				elements := strings.TrimLeft(t, "@router ")
-				e1 := strings.SplitN(elements, " ", 2)
-				if len(e1) < 1 {
-					return errors.New("you should has router infomation")
-				}
+type parsedComment struct {
+	routerPath string
+	methods    []string
+	params     map[string]parsedParam
+}
+
+type parsedParam struct {
+	name     string
+	datatype string
+	location string
+	defValue string
+	required bool
+}
+
+func parserComments(f *ast.FuncDecl, controllerName, pkgpath string) error {
+	if f.Doc != nil {
+		parsedComments, err := parseComment(f.Doc.List)
+		if err != nil {
+			return err
+		}
+		for _, parsedComment := range parsedComments {
+			if parsedComment.routerPath != "" {
 				key := pkgpath + ":" + controllerName
 				cc := ControllerComments{}
-				cc.Method = funcName
-				cc.Router = e1[0]
-				if len(e1) == 2 && e1[1] != "" {
-					e1 = strings.SplitN(e1[1], " ", 2)
-					if len(e1) >= 1 {
-						cc.AllowHTTPMethods = strings.Split(strings.Trim(e1[0], "[]"), ",")
-					} else {
-						cc.AllowHTTPMethods = append(cc.AllowHTTPMethods, "get")
-					}
-				} else {
-					cc.AllowHTTPMethods = append(cc.AllowHTTPMethods, "get")
-				}
-				if len(e1) == 2 && e1[1] != "" {
-					keyval := strings.Split(strings.Trim(e1[1], "[]"), " ")
-					for _, kv := range keyval {
-						kk := strings.Split(kv, ":")
-						cc.Params = append(cc.Params, map[string]string{strings.Join(kk[:len(kk)-1], ":"): kk[len(kk)-1]})
-					}
-				}
+				cc.Method = f.Name.String()
+				cc.Router = parsedComment.routerPath
+				cc.AllowHTTPMethods = parsedComment.methods
+				cc.MethodParams = buildMethodParams(f.Type.Params.List, parsedComment)
 				genInfoList[key] = append(genInfoList[key], cc)
 			}
 		}
@@ -126,17 +133,159 @@ func parserComments(comments *ast.CommentGroup, funcName, controllerName, pkgpat
 	return nil
 }
 
-func genRouterCode() {
-	os.Mkdir(path.Join(workPath, "routers"), 0755)
-	Info("generate router from comments")
-	var globalinfo string
-	sortKey := make([]string, 0)
-	for k, _ := range genInfoList {
+func buildMethodParams(funcParams []*ast.Field, pc *parsedComment) []*param.MethodParam {
+	result := make([]*param.MethodParam, 0, len(funcParams))
+	for _, fparam := range funcParams {
+		for _, pName := range fparam.Names {
+			methodParam := buildMethodParam(fparam, pName.Name, pc)
+			result = append(result, methodParam)
+		}
+	}
+	return result
+}
+
+func buildMethodParam(fparam *ast.Field, name string, pc *parsedComment) *param.MethodParam {
+	options := []param.MethodParamOption{}
+	if cparam, ok := pc.params[name]; ok {
+		//Build param from comment info
+		name = cparam.name
+		if cparam.required {
+			options = append(options, param.IsRequired)
+		}
+		switch cparam.location {
+		case "body":
+			options = append(options, param.InBody)
+		case "header":
+			options = append(options, param.InHeader)
+		case "path":
+			options = append(options, param.InPath)
+		}
+		if cparam.defValue != "" {
+			options = append(options, param.Default(cparam.defValue))
+		}
+	} else {
+		if paramInPath(name, pc.routerPath) {
+			options = append(options, param.InPath)
+		}
+	}
+	return param.New(name, options...)
+}
+
+func paramInPath(name, route string) bool {
+	return strings.HasSuffix(route, ":"+name) ||
+		strings.Contains(route, ":"+name+"/")
+}
+
+var routeRegex = regexp.MustCompile(`@router\s+(\S+)(?:\s+\[(\S+)\])?`)
+
+func parseComment(lines []*ast.Comment) (pcs []*parsedComment, err error) {
+	pcs = []*parsedComment{}
+	params := map[string]parsedParam{}
+
+	for _, c := range lines {
+		t := strings.TrimSpace(strings.TrimLeft(c.Text, "//"))
+		if strings.HasPrefix(t, "@Param") {
+			pv := getparams(strings.TrimSpace(strings.TrimLeft(t, "@Param")))
+			if len(pv) < 4 {
+				logs.Error("Invalid @Param format. Needs at least 4 parameters")
+			}
+			p := parsedParam{}
+			names := strings.SplitN(pv[0], "=>", 2)
+			p.name = names[0]
+			funcParamName := p.name
+			if len(names) > 1 {
+				funcParamName = names[1]
+			}
+			p.location = pv[1]
+			p.datatype = pv[2]
+			switch len(pv) {
+			case 5:
+				p.required, _ = strconv.ParseBool(pv[3])
+			case 6:
+				p.defValue = pv[3]
+				p.required, _ = strconv.ParseBool(pv[4])
+			}
+			params[funcParamName] = p
+		}
+	}
+
+	for _, c := range lines {
+		var pc = &parsedComment{}
+		pc.params = params
+
+		t := strings.TrimSpace(strings.TrimLeft(c.Text, "//"))
+		if strings.HasPrefix(t, "@router") {
+			t := strings.TrimSpace(strings.TrimLeft(c.Text, "//"))
+			matches := routeRegex.FindStringSubmatch(t)
+			if len(matches) == 3 {
+				pc.routerPath = matches[1]
+				methods := matches[2]
+				if methods == "" {
+					pc.methods = []string{"get"}
+					//pc.hasGet = true
+				} else {
+					pc.methods = strings.Split(methods, ",")
+					//pc.hasGet = strings.Contains(methods, "get")
+				}
+				pcs = append(pcs, pc)
+			} else {
+				return nil, errors.New("Router information is missing")
+			}
+		}
+	}
+	return
+}
+
+// direct copy from bee\g_docs.go
+// analysis params return []string
+// @Param	query		form	 string	true		"The email for login"
+// [query form string true "The email for login"]
+func getparams(str string) []string {
+	var s []rune
+	var j int
+	var start bool
+	var r []string
+	var quoted int8
+	for _, c := range str {
+		if unicode.IsSpace(c) && quoted == 0 {
+			if !start {
+				continue
+			} else {
+				start = false
+				j++
+				r = append(r, string(s))
+				s = make([]rune, 0)
+				continue
+			}
+		}
+
+		start = true
+		if c == '"' {
+			quoted ^= 1
+			continue
+		}
+		s = append(s, c)
+	}
+	if len(s) > 0 {
+		r = append(r, string(s))
+	}
+	return r
+}
+
+func genRouterCode(pkgRealpath string) {
+	os.Mkdir(getRouterDir(pkgRealpath), 0755)
+	logs.Info("generate router from comments")
+	var (
+		globalinfo string
+		sortKey    []string
+	)
+	for k := range genInfoList {
 		sortKey = append(sortKey, k)
 	}
 	sort.Strings(sortKey)
 	for _, k := range sortKey {
 		cList := genInfoList[k]
+		sort.Sort(ControllerCommentsSlice(cList))
 		for _, c := range cList {
 			allmethod := "nil"
 			if len(c.AllowHTTPMethods) > 0 {
@@ -156,18 +305,30 @@ func genRouterCode() {
 				}
 				params = strings.TrimRight(params, ",") + "}"
 			}
+			methodParams := "param.Make("
+			if len(c.MethodParams) > 0 {
+				lines := make([]string, 0, len(c.MethodParams))
+				for _, m := range c.MethodParams {
+					lines = append(lines, fmt.Sprint(m))
+				}
+				methodParams += "\n				" +
+					strings.Join(lines, ",\n				") +
+					",\n			"
+			}
+			methodParams += ")"
 			globalinfo = globalinfo + `
 	beego.GlobalControllerRouter["` + k + `"] = append(beego.GlobalControllerRouter["` + k + `"],
 		beego.ControllerComments{
-			"` + strings.TrimSpace(c.Method) + `",
-			` + "`" + c.Router + "`" + `,
-			` + allmethod + `,
-			` + params + `})
+			Method: "` + strings.TrimSpace(c.Method) + `",
+			` + "Router: `" + c.Router + "`" + `,
+			AllowHTTPMethods: ` + allmethod + `,
+			MethodParams: ` + methodParams + `,
+			Params: ` + params + `})
 `
 		}
 	}
 	if globalinfo != "" {
-		f, err := os.Create(path.Join(workPath, "routers", commentFilename))
+		f, err := os.Create(filepath.Join(getRouterDir(pkgRealpath), commentFilename))
 		if err != nil {
 			panic(err)
 		}
@@ -177,11 +338,11 @@ func genRouterCode() {
 }
 
 func compareFile(pkgRealpath string) bool {
-	if !utils.FileExists(path.Join(workPath, "routers", commentFilename)) {
+	if !utils.FileExists(filepath.Join(getRouterDir(pkgRealpath), commentFilename)) {
 		return true
 	}
-	if utils.FileExists(path.Join(workPath, lastupdateFilename)) {
-		content, err := ioutil.ReadFile(path.Join(workPath, lastupdateFilename))
+	if utils.FileExists(lastupdateFilename) {
+		content, err := ioutil.ReadFile(lastupdateFilename)
 		if err != nil {
 			return true
 		}
@@ -209,7 +370,7 @@ func savetoFile(pkgRealpath string) {
 	if err != nil {
 		return
 	}
-	ioutil.WriteFile(path.Join(workPath, lastupdateFilename), d, os.ModePerm)
+	ioutil.WriteFile(lastupdateFilename, d, os.ModePerm)
 }
 
 func getpathTime(pkgRealpath string) (lastupdate int64, err error) {
@@ -223,4 +384,20 @@ func getpathTime(pkgRealpath string) (lastupdate int64, err error) {
 		}
 	}
 	return lastupdate, nil
+}
+
+func getRouterDir(pkgRealpath string) string {
+	dir := filepath.Dir(pkgRealpath)
+	for {
+		d := filepath.Join(dir, "routers")
+		if utils.FileExists(d) {
+			return d
+		}
+
+		if r, _ := filepath.Rel(dir, AppPath); r == "." {
+			return d
+		}
+		// Parent dir.
+		dir = filepath.Dir(dir)
+	}
 }
