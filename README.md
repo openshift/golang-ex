@@ -73,7 +73,7 @@ file on your host machine. Just append this line at the end of that file:
 
 The `192.168.124.206` represents the IP address of the machine you are running
 OpenShift on. If your are running OpenShift on a different IP address, simply replace
-`192.168.124.206` with your local OpenShift IP address when adding the line above
+`192.168.124.206` with your OpenShift IP address when adding the line above
 to your `/etc/hosts` file. Once you have this change, you can just type the
 application DNS into browser and you should see the chat application login screen.
 
