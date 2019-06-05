@@ -9,13 +9,13 @@ This example was copied from the official [beego samples](https://github.com/bee
 
 If you'd like to install it, follow [these instructions](https://github.com/openshift/golang-ex/blob/master/README.md#installation).
 
-The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on, including the default set of ImageStreams defined.  Instructions for installing the default ImageStreams are available [here](https://docs.openshift.org/latest/install_config/imagestreams_templates.html).  If you are defining the set of ImageStreams now, remember to pass in the proper cluster-admin credentials and to create the ImageStreams in the 'openshift' namespace.
+The steps in this document assume that you have access to an OpenShift deployment that you can deploy applications on, including the default set of ImageStreams defined. Instructions for installing the default ImageStreams are available [here](https://docs.openshift.org/latest/install_config/imagestreams_templates.html). If you are defining the set of ImageStreams now, remember to pass in the proper cluster-admin credentials and to create the ImageStreams in the 'openshift' namespace.
 
 ### Installation
 
 1. Fork a copy of [golang-ex](https://github.com/openshift/golang-ex)
 2. Clone your repository to your development machine and cd to the repository directory
-3. Add a Golang application from the beego template:
+3. Add a Golang application from the beego template. **Note:** You will need to replace part of the `SOURCE_REPOSITORY_URL` where it says `yourusername` with your GitHub username before running:
 
         $ oc new-app openshift/templates/beego.json -p SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex
 
@@ -48,7 +48,7 @@ You can run the command below to watch for builds:
         beego-example     template=beego-example     name=beego-example           172.30.210.29    8080/TCP
 
 In this case, the IP for beego-example is 172.30.210.29 and it is on port 8080.  
-*Note*: you can also get this information from the web console.
+**Note**: you can also get this information from the web console.
 
 ### Building
 
@@ -71,9 +71,11 @@ file on your host machine. Just append this line at the end of that file:
 192.168.124.206 beego-example.openshiftapps.com
 ```
 
-The `192.168.124.206` is the IP address of the machine you are running the
-OpenShift on. Once you have this change, you can just type the application DNS
-into browser and you should see the chat application login screen.
+The `192.168.124.206` represents the IP address of the machine you are running
+OpenShift on. If your are running OpenShift on a different IP address, simply replace
+`192.168.124.206` with your OpenShift IP address when adding the line above
+to your `/etc/hosts` file. Once you have this change, you can just type the
+application DNS into browser and you should see the chat application login screen.
 
 ### License
 
