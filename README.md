@@ -15,7 +15,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 1. Fork a copy of [golang-ex](https://github.com/openshift/golang-ex)
 2. Clone your repository to your development machine and cd to the repository directory
-3. Add a Golang application from the beego template. *Note:* You will need to replace part of the `SOURCE_REPOSITORY_URL` where it says `yourusername` with your GitHub username before running:
+3. Add a Golang application from the beego template. **Note:** You will need to replace part of the `SOURCE_REPOSITORY_URL` where it says `yourusername` with your GitHub username before running:
 
         $ oc new-app openshift/templates/beego.json -p SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex
 
@@ -48,7 +48,7 @@ You can run the command below to watch for builds:
         beego-example     template=beego-example     name=beego-example           172.30.210.29    8080/TCP
 
 In this case, the IP for beego-example is 172.30.210.29 and it is on port 8080.  
-*Note*: you can also get this information from the web console.
+**Note**: you can also get this information from the web console.
 
 ### Building
 
