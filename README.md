@@ -15,7 +15,7 @@ The steps in this document assume that you have access to an OpenShift deploymen
 
 1. Fork a copy of [golang-ex](https://github.com/openshift/golang-ex)
 2. Clone your repository to your development machine and cd to the repository directory
-3. Add a Golang application from the beego template. **NOTE:** You will need to replace part of the `SOURCE_REPOSITORY_URL` where it says `yourusername` with your GitHub username before running:
+3. Add a Golang application from the beego template. *Note:* You will need to replace part of the `SOURCE_REPOSITORY_URL` where it says `yourusername` with your GitHub username before running:
 
         $ oc new-app openshift/templates/beego.json -p SOURCE_REPOSITORY_URL=https://github.com/yourusername/golang-ex
 
@@ -71,9 +71,11 @@ file on your host machine. Just append this line at the end of that file:
 192.168.124.206 beego-example.openshiftapps.com
 ```
 
-The `192.168.124.206` is the IP address of the machine you are running the
-OpenShift on. Once you have this change, you can just type the application DNS
-into browser and you should see the chat application login screen.
+The `192.168.124.206` represents the IP address of the machine you are running
+OpenShift on. If your are running OpenShift on a different IP address, simply replace
+`192.168.124.206` with your local OpenShift IP address when adding the line above
+to your `/etc/hosts` file. Once you have this change, you can just type the
+application DNS into browser and you should see the chat application login screen.
 
 ### License
 
